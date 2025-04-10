@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pong_ping/customEngine/ball_bouncer.dart';
 
 class Mainscreen extends StatelessWidget{
   const Mainscreen({super.key});
@@ -8,32 +9,8 @@ class Mainscreen extends StatelessWidget{
   Widget build(BuildContext context) {
     
     return Scaffold(
-      body: Stack(
-        alignment: AlignmentDirectional.center,
-        children: [
-          // background
-          Container(color: Colors.amber,), // put a GIF for better visuals
-
-          // foreground
-          ConstrainedBox(
-            constraints: BoxConstraints.tight(Size(100, 80)),
-            child: ListView(
-              semanticChildCount: 2,
-              children: [
-                // Play button
-                GestureDetector(
-                  child: Text('PLAY'),
-                ),
-
-                // Settings button
-                GestureDetector(
-                  child: Text('SETTINGS'),
-                )
-              ],
-            ),
-          )
-            ],
-          )
+      body: Center(
+        child: BallBouncer())
     );
   }
 
