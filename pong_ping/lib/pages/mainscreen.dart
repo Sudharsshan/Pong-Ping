@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pong_ping/customEngine/ball_bouncer.dart';
+import 'package:pong_ping/pages/game_arena.dart';
 
 class Mainscreen extends StatelessWidget{
   const Mainscreen({super.key});
@@ -13,13 +14,22 @@ class Mainscreen extends StatelessWidget{
         child: Stack(
           alignment: Alignment(0, 0),
           children: [
+            // Background animation
              BallBouncer(),
 
+             // Buttons
              ConstrainedBox(
               constraints: BoxConstraints(maxWidth: 200, maxHeight: 200),
               child: ListView(
                 children: [
-                    GestureDetector(
+                  // Play button
+                  GestureDetector(
+                    onTap: () {
+                      // Navigate user to change password page
+                      Navigator.of(context).push(MaterialPageRoute(
+                          builder: (BuildContext context) =>
+                              GameArena()));
+                    },
                       child: Container(
                         padding: EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -53,6 +63,10 @@ class Mainscreen extends StatelessWidget{
         )
         )
     );
+
+    void startGame(){
+
+    }
   }
 
   // navigate to settings page

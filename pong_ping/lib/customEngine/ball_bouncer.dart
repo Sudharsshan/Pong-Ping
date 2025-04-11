@@ -36,12 +36,12 @@ class BounceController extends State<BallBouncer> with SingleTickerProviderState
 
     // Calculate the exact velocity to go from paddleY up to startY
     
-    final startY = _ballY; // 0.5
+    final startY = _ballY; // 0.3
     // Using v^2 = 2 * g * Δy  →  v = sqrt(2 * g * (paddleY - startY))
     _initialVelocity = sqrt(2 * _gravity * (paddleY - startY));
 
     // start the ticker…
-    _ticker = this.createTicker(_onTick)..start();
+    _ticker = createTicker(_onTick)..start();
   }
 
   void _onTick(Duration elapsed) {
