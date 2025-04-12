@@ -19,7 +19,7 @@ class BounceController extends State<BallBouncer> with SingleTickerProviderState
   double _velocity = 0.0;   // in normalized units per second
   final double _gravity = 1.0; // accel in normalized units/sec²
 
-  // New: record the velocity needed to reach the starting height
+  // record the velocity needed to reach the starting height
   late final double _initialVelocity;
   final paddleY = 0.9;
 
@@ -35,8 +35,8 @@ class BounceController extends State<BallBouncer> with SingleTickerProviderState
     super.initState();
 
     // Calculate the exact velocity to go from paddleY up to startY
-    
     final startY = _ballY; // 0.3
+    
     // Using v^2 = 2 * g * Δy  →  v = sqrt(2 * g * (paddleY - startY))
     _initialVelocity = sqrt(2 * _gravity * (paddleY - startY));
 
@@ -113,7 +113,7 @@ class _BallPainter extends CustomPainter {
     final paddleWidth = size.width * 0.6;
     final paddleHeight = 20.0;
     final paddleX = (size.width - paddleWidth) / 2;
-    final paddleY = size.height * 0.9;
+    final paddleY = size.height * 0.91;
     paint.color = Colors.deepPurple;
     canvas.drawRect(
       Rect.fromLTWH(paddleX, paddleY, paddleWidth, paddleHeight),
