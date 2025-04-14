@@ -10,25 +10,35 @@ class GameEngine extends StatefulWidget{
   GameEngineState createState() => GameEngineState();
 }
 
-class GameEngineState extends State<GameEngine> with SingleTickerProviderStateMixin{
+class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
-  late Ticker _ticker;
-  Duration _lastElapsed = Duration.zero;
+  late Ticker ticker;
+  Duration lastElapsed = Duration.zero;
+
+  late Offset circleCenterNorm; // normalized [0.1] coordinates
+  late double circleRadiusNorm; // nirmalized to smaller dimension
+  final List<Offset> circleCenters = [];
+  final List<double> circleRadii = [];
+  int bounceCount = 0;
+  
+  double ballX = 0.5;
+  double velocityX = 0.4;
+  final RandomVar = Random();
 
   // Ball state
-  double _ballY = 0.3;      // normalized [0,1]
-  double _velocity = 0.0;   // in normalized units per second
-  final double _gravity = 1.0; // accel in normalized units/sec²
+  double ballY = 0.17;      // normalized [0,1]
+  double velocity = 0.0;   // in normalized units per second
+  final double gravity = 1.25; // accel in normalized units/sec²
 
   // record the velocity needed to reach the starting height
-  late final double _initialVelocity;
+  late final double initialVelocity;
   final paddleY = 0.9;
 
   // Max number of trail “particles”
-  final int _maxTrailLength = 20;
+  final int maxTrailLength = 20;
 
   // A list of past normalized Y positions
-  final List<double> _trail = [];
+  final List<double> trail = [];
 
   // bat position offset and limiter to prevent bat from going out of boundaries
   double batOffset = 0.0;
@@ -39,54 +49,178 @@ class GameEngineState extends State<GameEngine> with SingleTickerProviderStateMi
     super.initState();
 
     // Calculate the exact velocity to go from paddleY up to startY
-    final startY = _ballY; // 0.3
+    final startY = ballY; // 0.3
     
     // Using v^2 = 2 * g * Δy  →  v = sqrt(2 * g * (paddleY - startY))
-    _initialVelocity = sqrt(2 * _gravity * (paddleY - startY));
+    initialVelocity = sqrt(2 * gravity * (paddleY - startY));
 
+    _startTicker();
+    spawnCircle();
+  }
+
+  void _startTicker(){
+    lastElapsed = Duration.zero;
     // start the ticker…
-    _ticker = createTicker(_onTick)..start();
+    ticker = createTicker(_onTick)..start();
   }
 
   void _onTick(Duration elapsed) {
-    if (_lastElapsed == Duration.zero) {
+    if (lastElapsed == Duration.zero) {
       // first tick, just record and return
-      _lastElapsed = elapsed;
+      lastElapsed = elapsed;
       return;
     }
 
     // Compute delta time in seconds
-    final dt = (elapsed - _lastElapsed).inMilliseconds / 1000.0;
-    _lastElapsed = elapsed;
+    final dt = (elapsed - lastElapsed).inMilliseconds / 1000.0;
+    lastElapsed = elapsed;
 
     // Physics
-    _velocity += _gravity * dt;
-    _ballY += _velocity * dt;
+    velocity += gravity * dt; // vertical acceleration
+    ballX += velocityX * dt; // horizontal move
+    ballY += velocity * dt; // vertical move
 
-    // Bounce
-    if (_ballY >= paddleY) {
-      _ballY = paddleY;
-      _velocity = -_initialVelocity;  // reset to perfect upward speed
-    } else if (_ballY <= 0) {
-      _ballY = 0;
-      _velocity = _initialVelocity;   // if you also want it to bounce off the ceiling
+    // wall collisions
+    if(ballX <= 0){
+      ballX = 0;
+      velocityX = -velocityX;
+    } else if(ballX > 1){
+      ballX = 1;
+      velocityX = -velocityX;
     }
 
+    // top wall bounce
+    if(ballY <= 0){
+      ballY = 0;
+      velocity = initialVelocity;
+    }
+
+    // Bounce the ball or game over check
+    if(ballY >= paddleY){
+      // calculate bat bounds in normalized coordinates
+      // we know ballX is always center: 0.5 normalized (for now)
+      final ballXNorm = ballX;
+      // batWidth normalized:
+      final batWidthNorm = 0.3;
+      // bat center x normalized = 0.5 + (batOffset / screenWidth)
+      final screenWidth = MediaQuery.sizeOf(context).width;
+      final batOffsetNorm = batOffset / screenWidth;
+      final batLeft = 0.5 - batWidthNorm / 2 + batOffsetNorm;
+      final batRight = 0.5 + batWidthNorm / 2 + batOffsetNorm;
+
+      if(ballXNorm >= batLeft && ballXNorm <= batRight){
+        // hit
+        ballY = paddleY;
+        velocity = -initialVelocity;
+      } else {
+        // miss -> GAME OVER
+        gameOver();
+        return;
+      } 
+      }
+      else if (ballY <= 0){
+        ballY = 0;
+        velocity = initialVelocity;
+      }
+
+    // // Bounce
+    // if (ballY >= paddleY) {
+    //   ballY = paddleY;
+    //   velocity = -initialVelocity;  // reset to perfect upward speed
+    // } else if (ballY <= 0) {
+    //   ballY = 0;
+    //   velocity = initialVelocity;   // if you also want it to bounce off the ceiling
+    // }
+
     // 1. Add current position to the front
-    _trail.insert(0, _ballY);
+    trail.insert(0, ballY);
 
     // 2. Trim old entries
-    if (_trail.length > _maxTrailLength) {
-      _trail.removeLast();
+    if (trail.length > maxTrailLength) {
+      trail.removeLast();
+    }
+
+    final height = MediaQuery.sizeOf(context).height;
+
+    // ball collision
+    final X = ballX - circleCenterNorm.dx;
+    final Y = ballY - circleCenterNorm.dy;
+    final distance = sqrt(X * X + Y * Y);
+    if(distance <= circleRadiusNorm + (15.0 / height)){
+      // simple reflections: compute normal
+      final newX = X / distance;
+      final newY = Y / distance;
+
+      // velocity vector
+      final newVelocityX = velocityX;
+      final newVelocityY = velocity;
+
+      // reflect v' = v - 2*(v-n)*n
+      final dot = newVelocityX * newX + newVelocityY * newY;
+      final reflectedX = newVelocityX - 2 * dot * newX;
+      final reflectedY = newVelocityY - 2 * dot * newY;
+      velocityX = reflectedX;
+      velocity = reflectedY;
+
+      // move ball just outside circle ot avoid sticking
+      ballX = circleCenterNorm.dx + (newX * (circleRadiusNorm + 15.0 / height));
+      ballY = circleCenterNorm.dy + (newY * (circleRadiusNorm + 15.0 / height));
     }
 
     // Trigger repaint
     setState(() {});
   }
 
+  void gameOver(){
+    ticker.stop();
+    showDialog(
+      context: context, 
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('GAME OVER', style: TextStyle(color: Color.fromARGB(255, 255, 0, 0)),),
+        content: const Text('You missed the ball!', style: TextStyle(color: Color.fromARGB(255, 255, 0, 0),),),
+        backgroundColor: Colors.black,
+        actions: [
+          TextButton(onPressed: (){
+            Navigator.of(context).pop();
+            resetGame();
+          }, 
+          child: const Text('RESTART', style: TextStyle(color: Colors.blue))
+        )
+      ],
+    ));
+  }
+
+  void resetGame(){
+    // reset state
+    setState(() {
+      ballY = 0.17;
+      velocity = 0.0;
+      trail.clear();
+      batOffset = 0;
+      offsetCount = 0;
+    });
+
+    ticker.dispose;
+
+    spawnCircle();
+
+    _startTicker();
+  }
+
+  void spawnCircle(){
+    // radius betweel 0.05 to 0.1 of the screen
+    circleRadiusNorm - 0.05 + RandomVar.nextDouble() * 0.05;
+    // center X between radius and 1 - radius
+    final centerX = circleRadiusNorm + RandomVar.nextDouble() * (1 - 2 * circleRadiusNorm);
+    // center Y between 0.2 and 0.7 so it's in the middle
+    final centerY = 0.2 + RandomVar.nextDouble() * 0.5;
+    circleCenterNorm = Offset(centerX, centerY);
+  }
+
   @override
   void dispose() {
-    _ticker.dispose();
+    ticker.dispose();
     super.dispose();
   }
 
@@ -126,7 +260,13 @@ class GameEngineState extends State<GameEngine> with SingleTickerProviderStateMi
                   borderRadius: BorderRadius.circular(30)
                 ),
                 child: CustomPaint(
-                  painter: Painter(ballY: _ballY, trail: _trail, batOffset: batOffset),
+                  painter: Painter(
+                    ballY: ballY, 
+                    trail: trail, 
+                    batOffset: batOffset,
+                    circleCenterNorm: circleCenterNorm,
+                    circleRadiusNorm: circleRadiusNorm,
+                  ),
                   child: Container(),
                 ),
               ),
@@ -176,12 +316,28 @@ class Painter extends CustomPainter{
   final double ballY;
   final List<double> trail;
   final double batOffset;
+  final Offset circleCenterNorm;
+  final double circleRadiusNorm;
 
-  Painter({required this.ballY, required this.trail, required this.batOffset});
+  Painter({
+    required this.ballY, 
+    required this.trail, 
+    required this.batOffset, 
+    required this.circleCenterNorm, 
+    required this.circleRadiusNorm
+  });
 
   @override
   void paint(Canvas canvas, Size size){
     final paint = Paint()..isAntiAlias = true;
+
+    // draw obstacle circle
+    final circleX = circleCenterNorm.dx * size.width;
+    final circleY = circleCenterNorm.dy * size.height;
+    // radius in pixels: use min dimension
+    final radius = circleRadiusNorm * min(size.width, size.height);
+    paint.color = Colors.redAccent.withOpacity(0.7);
+    canvas.drawCircle(Offset(circleX, circleY), radius, paint);
 
     // Draw ball and it's trail
     final ballRadius = 15.0;
