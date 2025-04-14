@@ -183,6 +183,26 @@ class Painter extends CustomPainter{
   void paint(Canvas canvas, Size size){
     final paint = Paint()..isAntiAlias = true;
 
+    // Draw ball and it's trail
+    final ballRadius = 15.0;
+    final ballX = size.width / 2;
+    final ballPosY = ballY * size.height;
+
+    // trails
+    for(int i = 0; i < trail.length; i++){
+      final posY = trail[i] * size.height;
+
+      // fade the balls
+      final opacity = (1 - i / trail.length).clamp(0.0, 1.0);
+      paint.color = const Color.fromARGB(255, 247, 151, 183).withOpacity(opacity * 0.6);
+      final radius = ballRadius * (1 - i / (trail.length * 1.2));
+      canvas.drawCircle(Offset(ballX, posY), radius, paint);
+    }
+
+    // draw the ball
+    paint.color = Colors.purple;
+    canvas.drawCircle(Offset(ballX, ballPosY), ballRadius, paint);
+
     // draw the bottom bat
     final batWidth = size.width * 0.3;
     final batHeight = 10.0;
