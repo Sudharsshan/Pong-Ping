@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pong_ping/customEngine/gameEngine.dart';
+import 'package:pong_ping/customEngine/gameEnginePart2.dart';
 
 class GameArena extends StatefulWidget{
   const GameArena({super.key});
@@ -21,7 +21,7 @@ class GameArenaState extends State<GameArena> with SingleTickerProviderStateMixi
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GameEngine(),
+      body: GameEnginePart2(),
     );
   }
 }

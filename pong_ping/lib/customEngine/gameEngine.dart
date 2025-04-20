@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:math';
 
+import 'package:pong_ping/pages/game_arena.dart';
+
 class GameEngine extends StatefulWidget{
   const GameEngine({super.key});
 
@@ -15,8 +17,6 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
   late Ticker ticker;
   Duration lastElapsed = Duration.zero;
 
-  late Offset circleCenterNorm; // normalized [0.1] coordinates
-  late double circleRadiusNorm; // nirmalized to smaller dimension
   final List<Offset> circleCenters = [];
   final List<double> circleRadii = [];
   int bounceCount = 0;
@@ -32,7 +32,7 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
   // record the velocity needed to reach the starting height
   late final double initialVelocity;
-  final paddleY = 0.9;
+  final paddleY = 0.91;
 
   // Max number of trail “particles”
   final int maxTrailLength = 20;
@@ -110,8 +110,14 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
       if(ballXNorm >= batLeft && ballXNorm <= batRight){
         // hit
-        ballY = paddleY;
+        ballY = paddleY - 0.001;
         velocity = -initialVelocity;
+
+        // count the ball hits
+        bounceCount++;
+        if(bounceCount % 5 == 0){
+          spawnCircle();
+        }
       } else {
         // miss -> GAME OVER
         gameOver();
@@ -142,29 +148,30 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
     final height = MediaQuery.sizeOf(context).height;
 
-    // ball collision
-    final X = ballX - circleCenterNorm.dx;
-    final Y = ballY - circleCenterNorm.dy;
-    final distance = sqrt(X * X + Y * Y);
-    if(distance <= circleRadiusNorm + (15.0 / height)){
-      // simple reflections: compute normal
-      final newX = X / distance;
-      final newY = Y / distance;
+    // ball collision(s)
+    for(int i = 0; i < circleCenters.length; i++){
+      final center = circleCenters[i];
+      final radiusNorm = circleRadii[i];
+      final distanceX = ballX - center.dx;
+      final distanceY = ballY - center.dy;
+      final distance = sqrt(distanceX * distanceX + distanceY * distanceY);
+      final ballRadiusNorm = 15.0 / MediaQuery.sizeOf(context).height;
 
-      // velocity vector
-      final newVelocityX = velocityX;
-      final newVelocityY = velocity;
+      if(distance <= radiusNorm + ballRadiusNorm){
+        // reflect the ball
+        final newX = distanceX / distance;
+        final newY = distanceY / distance;
+        final newVelocityX = velocityX;
+        final newVelocityY = velocity;
+        final dot = newVelocityX * newX + newVelocityY * newY;
+        velocityX = newVelocityX - 2 * dot * newX;
+        velocity = newVelocityY - 2 * dot * newY;
 
-      // reflect v' = v - 2*(v-n)*n
-      final dot = newVelocityX * newX + newVelocityY * newY;
-      final reflectedX = newVelocityX - 2 * dot * newX;
-      final reflectedY = newVelocityY - 2 * dot * newY;
-      velocityX = reflectedX;
-      velocity = reflectedY;
-
-      // move ball just outside circle ot avoid sticking
-      ballX = circleCenterNorm.dx + (newX * (circleRadiusNorm + 15.0 / height));
-      ballY = circleCenterNorm.dy + (newY * (circleRadiusNorm + 15.0 / height));
+        // push the ball outside
+        ballX = center.dx + newX * (radiusNorm + ballRadiusNorm);
+        ballY = center.dy + newY * (radiusNorm + ballRadiusNorm);
+        break; // only handle one ball per frame
+      }
     }
 
     // Trigger repaint
@@ -173,12 +180,13 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
   void gameOver(){
     ticker.stop();
+    String duration = lastElapsed.inSeconds.toString();
     showDialog(
       context: context, 
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('GAME OVER', style: TextStyle(color: Color.fromARGB(255, 255, 0, 0)),),
-        content: const Text('You missed the ball!', style: TextStyle(color: Color.fromARGB(255, 255, 0, 0),),),
+        content: Text('You missed the ball!\nDuration: ${duration}s', style: TextStyle(color: Color.fromARGB(255, 255, 0, 0),),),
         backgroundColor: Colors.black,
         actions: [
           TextButton(onPressed: (){
@@ -193,30 +201,44 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
 
   void resetGame(){
     // reset state
-    setState(() {
-      ballY = 0.17;
-      velocity = 0.0;
-      trail.clear();
-      batOffset = 0;
-      offsetCount = 0;
-    });
-
-    ticker.dispose;
-
-    spawnCircle();
-
-    _startTicker();
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+      builder: (BuildContext context) => GameArena()));
   }
 
-  void spawnCircle(){
-    // radius betweel 0.05 to 0.1 of the screen
-    circleRadiusNorm - 0.05 + RandomVar.nextDouble() * 0.05;
-    // center X between radius and 1 - radius
-    final centerX = circleRadiusNorm + RandomVar.nextDouble() * (1 - 2 * circleRadiusNorm);
-    // center Y between 0.2 and 0.7 so it's in the middle
-    final centerY = 0.2 + RandomVar.nextDouble() * 0.5;
-    circleCenterNorm = Offset(centerX, centerY);
+  void spawnCircle() {
+  bool validPosition = false;
+  int attempts = 0;
+  final maxAttempts = 100;
+
+  double radiusNorm;
+  double centerX;
+  double centerY;
+
+  do {
+    radiusNorm = 0.05 + RandomVar.nextDouble() * 0.05;
+    centerX = radiusNorm + RandomVar.nextDouble() * (1 - 2 * radiusNorm);
+    centerY = 0.2 + RandomVar.nextDouble() * 0.5;
+
+    validPosition = true;
+    for (int i = 0; i < circleCenters.length; i++) {
+      final existingCenter = circleCenters[i];
+      final existingRadius = circleRadii[i];
+      final dx = centerX - existingCenter.dx;
+      final dy = centerY - existingCenter.dy;
+      final distance = sqrt(dx * dx + dy * dy);
+      if (distance < (radiusNorm + existingRadius)) {
+        validPosition = false;
+        break;
+      }
+    }
+    attempts++;
+  } while (!validPosition && attempts < maxAttempts);
+
+  if (validPosition) {
+    circleCenters.add(Offset(centerX, centerY));
+    circleRadii.add(radiusNorm);
   }
+}
 
   @override
   void dispose() {
@@ -264,8 +286,8 @@ class GameEngineState extends State<GameEngine> with TickerProviderStateMixin{
                     ballY: ballY, 
                     trail: trail, 
                     batOffset: batOffset,
-                    circleCenterNorm: circleCenterNorm,
-                    circleRadiusNorm: circleRadiusNorm,
+                    circleCenters: circleCenters,
+                    circleRadii: circleRadii,
                   ),
                   child: Container(),
                 ),
@@ -316,28 +338,31 @@ class Painter extends CustomPainter{
   final double ballY;
   final List<double> trail;
   final double batOffset;
-  final Offset circleCenterNorm;
-  final double circleRadiusNorm;
+  final List<Offset> circleCenters;
+  final List<double> circleRadii;
 
   Painter({
     required this.ballY, 
     required this.trail, 
     required this.batOffset, 
-    required this.circleCenterNorm, 
-    required this.circleRadiusNorm
+    required this.circleCenters, 
+    required this.circleRadii
   });
 
   @override
   void paint(Canvas canvas, Size size){
     final paint = Paint()..isAntiAlias = true;
+    final minDim = min(size.width, size.height);
 
-    // draw obstacle circle
-    final circleX = circleCenterNorm.dx * size.width;
-    final circleY = circleCenterNorm.dy * size.height;
-    // radius in pixels: use min dimension
-    final radius = circleRadiusNorm * min(size.width, size.height);
+    // draw each circle
     paint.color = Colors.redAccent.withOpacity(0.7);
-    canvas.drawCircle(Offset(circleX, circleY), radius, paint);
+    for(int i = 0; i < circleCenters.length; i++){
+      final c = circleCenters[i];
+      final r = circleRadii[i] * minDim;
+      final cx = c.dx * size.width;
+      final cy = c.dy * size.height;
+      canvas.drawCircle(Offset(cx, cy), r, paint);
+    }
 
     // Draw ball and it's trail
     final ballRadius = 15.0;
@@ -369,5 +394,8 @@ class Painter extends CustomPainter{
   }
 
   @override
-  bool shouldRepaint(covariant Painter old) => old.ballY != ballY || old.trail.length != trail.length;
+  bool shouldRepaint(covariant Painter old) => 
+  old.ballY != ballY || 
+  old.trail.length != trail.length ||
+  old.circleCenters.length != circleCenters.length;
 }
